@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <alsa/asoundlib.h>
-#include <pthread.h>
 
 #include "dts.h"
 #include "libaptx100.h"
@@ -16,9 +15,6 @@ void get_dts_header(FILE* fptr, dts_header *header) {
 int get_dts_frame(FILE* fptr, int channel, int frame, unsigned short *aptxBuf) {
     
     int offset = AUDIO_START + (frame * 7350) + (channel * 2);
-    // if (offset % 2 != 0) {
-    //     offset-=5;
-    // }
     fseek(fptr, offset, SEEK_SET); //Start reading from the specified frame
     
     unsigned short current_sample[1];
@@ -34,7 +30,7 @@ int get_dts_frame(FILE* fptr, int channel, int frame, unsigned short *aptxBuf) {
 int main() {
     #pragma region Header and Setup
     struct dts_header header;
-    char filename[] = "mnt/R6T5.AUD";
+    char filename[] = "R6T5.AUD";
 
     FILE *fptr;
     fptr = fopen(filename, "rb");
@@ -51,25 +47,19 @@ int main() {
     printf("Reel #%d\n", header.dts_reel);
     #pragma endregion
 
-    //Initializing APT-X100 decoder
-    aptxCtx_t *aptxContextLeft;
-    aptxContextLeft = aptxCreate(0, -1, 0, 1);
-    aptxDecInit(aptxContextLeft, 1);
+    //Setting up aptx decoders and audio buffers for each channel
+    int channels = 5;
+    aptxCtx_t *aptxContexts[channels];
+    short *pcmBuf[channels];
+    unsigned short *aptxBuf[channels];
+    short outputBuf[2940 * channels];
 
-    aptxCtx_t *aptxContextRight;
-    aptxContextRight = aptxCreate(0, -1, 0, 1);
-    aptxDecInit(aptxContextRight, 1);
-
-    //Setting up encoded (APT-X100) and decoded (PCM) buffers
-    short pcmBufLeft[2940];
-    short pcmBufRight[2940];
-    unsigned short aptxBufLeft[735];
-    unsigned short aptxBufRight[735];
-
-    short outputBuf[5880];
-
-    dts_channel channel_left = LEFT;
-    dts_channel channel_right = CENTER;
+    for (int i = 0; i < channels; i++) {
+        aptxContexts[i] = aptxCreate(0, -1, 0, 1);
+        aptxDecInit(aptxContexts[i], 1);
+        pcmBuf[i] = malloc(sizeof(short) * 2940);
+        aptxBuf[i] = malloc(sizeof(unsigned short) * 735);
+    }
 
     //Setting up sound library
     snd_pcm_t *handle;
@@ -81,41 +71,35 @@ int main() {
         return 1;
     }
 
-    //Set hardware parameters: S16_LE, Interleaved, 2 channels, 44100Hz, soft-resample, 500ms latency
-    if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, 44100, 1, 50000)) < 0) {
+    //Set hardware parameters: sample format, interleaved?, channels, sample rate [hz], soft-resample?, latency(us)
+    if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, channels, 44100, 1, 500000)) < 0) {
         fprintf(stderr, "Setting parameters error: %s\n", snd_strerror(err));
         return 1;
     }
 
     int minute = 0;
     int second = 0;
-    int frame = 0;
+    int curr_frame = 0;
     //main decoding loop
-    for (int i = 7500; i < 13900; i++) { //iterate over the file frame by frame
-        //Fetching encoded samples from the DTS file
-        get_dts_frame(fptr, channel_left, i, aptxBufLeft);
-        get_dts_frame(fptr, channel_right, i, aptxBufRight);
+    for (int frame = 7500; frame < 18900; frame++) { //iterate over the file frame by frame
+        for (int channel = 0; channel < channels; channel++) {
+            get_dts_frame(fptr, channel, frame, aptxBuf[channel]);
+            aptxDecode(aptxContexts[channel], 0, 2940, 0, pcmBuf[channel], 1, aptxBuf[channel]);
+        }
 
-        //Decoding the fetched samples
-        aptxDecode(aptxContextLeft, 0, 2940, 0, pcmBufLeft, 1, aptxBufLeft);
-        aptxDecode(aptxContextRight, 0, 2940, 0, pcmBufRight, 1, aptxBufRight);
-
-        minute = i/900;
-        second = (i%900)/15;
-        frame = (i%15) * 2;
-        printf("\r%02d:%02d:%02d", minute, second, frame);
+        minute = frame/900;
+        second = (frame%900)/15;
+        curr_frame = (frame%15) * 2;
+        printf("\r%02d:%02d:%02d", minute, second, curr_frame);
         fflush(stdout);
 
-        for (int j = 0; j < 5880; j++) {
-            if (j % 2 == 0) {
-                outputBuf[j] = pcmBufLeft[j/2];
-            } else {
-                outputBuf[j] = pcmBufRight[j/2];
-            }
+        //combining all the samples
+        for (int j = 0; j < (2940 * channels); j++) {
+            outputBuf[j] = pcmBuf[j%channels][j/channels];
+            //outputBuf[j] = *(*(pcmBuf + (j%channels) + (j/channels)));
         }
 
         snd_pcm_writei(handle, outputBuf, 2940);
-
     }
 
     // Close the DTS file
