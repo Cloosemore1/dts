@@ -34,7 +34,6 @@ void decode_dts_frame(FILE* fptr, int channel, int frame, short *pcmBuf, short *
             aptxBuf[i] = current_sample[0];
             fseek(fptr, 8, SEEK_CUR);
         } else {
-            printf("EOF");
             break; //Stop reading if EOF is reached
         }
     }

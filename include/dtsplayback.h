@@ -1,6 +1,7 @@
 #pragma once
 #include <alsa/asoundlib.h>
 #include "libaptx100.h"
+#include "dtstimecode.h"
 
 #define AUDIO_START 102
 
@@ -29,13 +30,6 @@ typedef struct dts_header {
     unsigned char dts_encrypted;
     unsigned char dts_encryption_key[2];
 } dts_header;
-
-//DTS 35mm film timecode format
-typedef struct dts_timecode {
-    unsigned short frame;
-    unsigned short serial;
-    unsigned char reel;
-} dts_timecode;
 
 /*
     Retrieves header information from a DTS .AUD or .AUE file
