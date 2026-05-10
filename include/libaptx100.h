@@ -73,3 +73,5 @@ aptxCtx_t* aptxCreate(unsigned int mode, int buffers, int* channel_mode, int cha
 void aptxDecInit(aptxCtx_t* aptxCtx, int channels);
 
 int aptxDecode(aptxCtx_t* aptxCtx, int unused, int samples, bool mode_pcm_msb, short* pcmBuf, bool mode_aptx_msb, unsigned short* aptxBuf);
+
+void aptxDelete(aptxCtx_t* aptxCtx);

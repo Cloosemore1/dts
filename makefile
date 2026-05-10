@@ -1,10 +1,10 @@
 IDIR = ./include
-_DEPS = dts.h
+_DEPS = dtsplayback.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 CFLAGS = -I$(IDIR)
 
-dts: src/dts.c $(DEPS)
-	gcc -o dts src/dts.c -laptx100 -lasound $(CFLAGS)
+dts: src/dtsplayback.c $(DEPS)
+	gcc -o dtsplayback src/dtsplayback.c -laptx100 -lasound $(CFLAGS)
 
 clean:
-	rm -f dts
+	rm -f dtsplayback
